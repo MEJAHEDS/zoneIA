@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ZoneAI — Analyse de zone de chalandise</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Inter', system-ui, sans-serif; background: #0f0f13; color: #e2e8f0; min-height: 100vh; }
+
+    /* HEADER */
+    header {
+      padding: 20px 32px;
+      border-bottom: 1px solid #1e1e2e;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: #0f0f13;
+    }
+    .logo { font-size: 22px; font-weight: 800; color: #a78bfa; letter-spacing: -0.5px; }
+    .logo span { color: #fff; }
+    .tagline { font-size: 12px; color: #64748b; margin-left: auto; }
+
+    /* MAIN LAYOUT */
+    .layout { display: grid; grid-template-columns: 380px 1fr; height: calc(100vh - 65px); }
+
+    /* SIDEBAR */
+    .sidebar {
+      background: #13131a;
+      border-right: 1px solid #1e1e2e;
+      padding: 24px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+    label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; }
+    input, select {
+      background: #1e1e2e;
+      border: 1px solid #2d2d3e;
+      border-radius: 8px;
+      padding: 10px 14px;
+      color: #e2e8f0;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input:focus, select:focus { border-color: #7c3aed; }
+    input::placeholder { color: #475569; }
+
+    .btn {
+      background: #7c3aed;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 12px 20px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+      width: 100%;
+    }
+    .btn:hover { background: #6d28d9; }
+    .btn:active { transform: scale(0.98); }
+    .btn:disabled { background: #374151; cursor: not-allowed; transform: none; }
+
+    /* STATUS */
+    .status { font-size: 12px; color: #94a3b8; text-align: center; padding: 8px; }
+    .status.loading { color: #a78bfa; }
+    .status.error { color: #f87171; }
+
+    /* TOOL TRACE */
+    .trace-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #64748b; }
+    .trace-item {
+      background: #1e1e2e;
+      border-radius: 6px;
+      padding: 10px 12px;
+      margin-top: 6px;
+      border-left: 2px solid #7c3aed;
+    }
+    .trace-tool { font-size: 11px; font-weight: 700; color: #a78bfa; }
+    .trace-input { font-size: 11px; color: #94a3b8; margin-top: 2px; white-space: pre-wrap; word-break: break-all; }
+
+    /* STATS */
+    .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .stat-card { background: #1e1e2e; border-radius: 8px; padding: 12px; }
+    .stat-value { font-size: 20px; font-weight: 700; color: #a78bfa; }
+    .stat-label { font-size: 11px; color: #64748b; margin-top: 2px; }
+
+    /* RIGHT PANEL */
+    .right-panel { display: grid; grid-template-rows: 1fr 1fr; overflow: hidden; }
+    #map { width: 100%; height: 100%; z-index: 1; }
+    .report-panel {
+      background: #13131a;
+      border-top: 1px solid #1e1e2e;
+      padding: 24px 32px;
+      overflow-y: auto;
+    }
+    .report-panel h2 { font-size: 14px; color: #94a3b8; font-weight: 600; margin-bottom: 16px; text-transform: uppercase; letter-spacing: 1px; }
+
+    /* MARKDOWN STYLES */
+    .md-content h1 { font-size: 20px; color: #a78bfa; margin: 16px 0 8px; }
+    .md-content h2 { font-size: 16px; color: #c4b5fd; margin: 14px 0 6px; border-bottom: 1px solid #1e1e2e; padding-bottom: 4px; }
+    .md-content h3 { font-size: 14px; color: #ddd6fe; margin: 10px 0 4px; }
+    .md-content p { font-size: 13px; color: #94a3b8; line-height: 1.7; margin-bottom: 10px; }
+    .md-content ul { padding-left: 20px; margin-bottom: 10px; }
+    .md-content li { font-size: 13px; color: #94a3b8; line-height: 1.6; margin-bottom: 4px; }
+    .md-content strong { color: #e2e8f0; }
+    .md-content code { background: #1e1e2e; padding: 1px 5px; border-radius: 3px; font-size: 12px; color: #a78bfa; }
+
+    .empty-state { color: #374151; text-align: center; padding: 40px 20px; font-size: 14px; }
+    .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #7c3aed; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: middle; margin-right: 6px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Zone<span>AI</span></div>
+  <div class="tagline">Analyse de zone de chalandise · Powered by Claude AI</div>
+</header>
+
+<div class="layout">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="form-group">
+      <label>Adresse à analyser</label>
+      <input id="address" type="text" placeholder="10 rue de Rivoli, Paris" value="47 rue de Rivoli, Paris" />
+    </div>
+    <div class="form-group">
+      <label>Type d'établissement</label>
+      <select id="business">
+        <option value="restaurant">Restaurant</option>
+        <option value="pharmacie">Pharmacie</option>
+        <option value="supermarché">Supermarché</option>
+        <option value="salle de sport">Salle de sport</option>
+        <option value="boulangerie">Boulangerie</option>
+        <option value="cabinet médical">Cabinet médical</option>
+        <option value="banque">Banque</option>
+        <option value="hôtel">Hôtel</option>
+      </select>
+    </div>
+    <button class="btn" id="analyzeBtn" onclick="runAnalysis()">Analyser la zone</button>
+    <div class="status" id="status">Entrez une adresse et lancez l'analyse.</div>
+
+    <!-- STATS -->
+    <div id="stats" style="display:none">
+      <div class="trace-title" style="margin-bottom:8px">Données clés</div>
+      <div class="stats" id="statsGrid"></div>
+    </div>
+
+    <!-- TOOL TRACE -->
+    <div id="traceSection" style="display:none">
+      <div class="trace-title">Agent — Outils utilisés</div>
+      <div id="traceList"></div>
+    </div>
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="right-panel">
+    <div id="map"></div>
+    <div class="report-panel">
+      <h2>Rapport stratégique</h2>
+      <div id="reportContent" class="empty-state">Le rapport généré par Claude apparaîtra ici.</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // Init map
+  const map = L.map('map').setView([48.8566, 2.3522], 14);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '©OpenStreetMap ©CartoDB', maxZoom: 19
+  }).addTo(map);
+
+  let markers = [];
+  let circles = [];
+
+  function clearMap() {
+    markers.forEach(m => map.removeLayer(m));
+    circles.forEach(c => map.removeLayer(c));
+    markers = []; circles = [];
+  }
+
+  function addMarker(lat, lon, label, color = '#a78bfa') {
+    const icon = L.divIcon({
+      html: `<div style="background:${color};width:10px;height:10px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 6px ${color}"></div>`,
+      className: '', iconSize: [10, 10], iconAnchor: [5, 5]
+    });
+    const m = L.marker([lat, lon], { icon }).addTo(map).bindPopup(label);
+    markers.push(m);
+    return m;
+  }
+
+  function addCircle(lat, lon, radiusM, color) {
+    const c = L.circle([lat, lon], { radius: radiusM, color, fillColor: color, fillOpacity: 0.05, weight: 1 }).addTo(map);
+    circles.push(c);
+  }
+
+  async function runAnalysis() {
+    const address = document.getElementById('address').value.trim();
+    const business = document.getElementById('business').value;
+    if (!address) { setStatus('Veuillez entrer une adresse.', 'error'); return; }
+
+    const btn = document.getElementById('analyzeBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Analyse en cours...';
+    setStatus('<span class="spinner"></span>Claude analyse la zone...', 'loading');
+
+    document.getElementById('reportContent').innerHTML = '<div class="empty-state">Claude collecte les données et génère le rapport...</div>';
+    document.getElementById('stats').style.display = 'none';
+    document.getElementById('traceSection').style.display = 'none';
+    clearMap();
+
+    try {
+      const res = await fetch('/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ address, business_type: business })
+      });
+      const data = await res.json();
+
+      // Rate limit hit
+      if (res.status === 429) {
+        setStatus(`🚫 ${data.message}`, 'error');
+        document.getElementById('reportContent').innerHTML = `
+          <div class="empty-state" style="color:#f87171">
+            <div style="font-size:32px;margin-bottom:12px">🚫</div>
+            <strong>${data.message}</strong>
+          </div>`;
+        btn.disabled = false;
+        btn.innerHTML = 'Analyser la zone';
+        return;
+      }
+
+      // Map
+      if (data.geo && data.geo.lat) {
+        const { lat, lon } = data.geo;
+        map.setView([lat, lon], 15);
+        addMarker(lat, lon, `<b>${business}</b><br>${address}`, '#a78bfa').openPopup();
+        addCircle(lat, lon, 500, '#7c3aed');
+        addCircle(lat, lon, 1000, '#4f46e5');
+      }
+
+      // Competitors on map
+      if (data.tool_calls) {
+        data.tool_calls.forEach(tc => {
+          if (tc.tool === 'get_competitors' && tc.result.top_results) {
+            tc.result.top_results.forEach(p => {
+              if (p.lat && p.lon) addMarker(p.lat, p.lon, p.name, '#f59e0b');
+            });
+          }
+        });
+      }
+
+      // Stats
+      renderStats(data);
+
+      // Tool trace
+      renderTrace(data.tool_calls || []);
+
+      // Report
+      if (data.report) {
+        document.getElementById('reportContent').innerHTML = `<div class="md-content">${marked.parse(data.report)}</div>`;
+      }
+
+      const remaining = data.remaining_requests ?? 0;
+      const remainingMsg = remaining === 0 ? ' · <span style="color:#f87171">Plus d\'analyse disponible aujourd\'hui</span>' : ` · <span style="color:#94a3b8">${remaining} analyse${remaining > 1 ? 's' : ''} restante${remaining > 1 ? 's' : ''} aujourd\'hui</span>`;
+      setStatus(`✓ Analyse terminée — ${data.tool_calls?.length || 0} outils utilisés${remainingMsg}`, '');
+    } catch (e) {
+      setStatus('Erreur lors de l\'analyse. Vérifiez votre clé API.', 'error');
+      document.getElementById('reportContent').innerHTML = `<div class="empty-state">Erreur: ${e.message}</div>`;
+    }
+
+    btn.disabled = false;
+    btn.innerHTML = 'Analyser la zone';
+  }
+
+  function renderStats(data) {
+    const grid = document.getElementById('statsGrid');
+    grid.innerHTML = '';
+    const stats = [];
+
+    data.tool_calls?.forEach(tc => {
+      if (tc.tool === 'get_commune_info' && tc.result.population) {
+        stats.push({ value: tc.result.population.toLocaleString('fr'), label: 'Population commune' });
+        stats.push({ value: `${tc.result.density_per_km2?.toLocaleString('fr') || '–'} /km²`, label: 'Densité' });
+      }
+      if (tc.tool === 'get_competitors') {
+        stats.push({ value: tc.result.count, label: `${tc.result.category} dans ${tc.result.radius_m}m` });
+      }
+    });
+
+    if (stats.length === 0) return;
+    stats.slice(0, 4).forEach(s => {
+      grid.innerHTML += `<div class="stat-card"><div class="stat-value">${s.value}</div><div class="stat-label">${s.label}</div></div>`;
+    });
+    document.getElementById('stats').style.display = 'block';
+  }
+
+  function renderTrace(toolCalls) {
+    if (!toolCalls.length) return;
+    const list = document.getElementById('traceList');
+    list.innerHTML = '';
+    toolCalls.forEach(tc => {
+      list.innerHTML += `
+        <div class="trace-item">
+          <div class="trace-tool">${tc.tool}()</div>
+          <div class="trace-input">${JSON.stringify(tc.input, null, 1).slice(0, 200)}</div>
+        </div>`;
+    });
+    document.getElementById('traceSection').style.display = 'block';
+  }
+
+  function setStatus(msg, type = '') {
+    const el = document.getElementById('status');
+    el.innerHTML = msg;
+    el.className = `status ${type}`;
+  }
+</script>
+</body>
+</html>
