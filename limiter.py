@@ -10,7 +10,7 @@ import time
 from pathlib import Path
 
 DB_PATH = Path(__file__).parent / "rate_limit.db"
-MAX_REQUESTS = 2
+MAX_REQUESTS = 100
 WINDOW_SECONDS = 24 * 60 * 60  # 24 hours
 
 
